@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chess P2P</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #060f1e;
+    --surface: #0d1f3c;
+    --surface2: #071330;
+    --border: #1e3f6e;
+    --blue: #2563eb;
+    --blue-light: #3b82f6;
+    --blue-pale: #93c5fd;
+    --text: #e2eaf8;
+    --text-dim: #6b8fc4;
+    --light-sq: #d6e8f5;
+    --dark-sq: #1e3a5f;
+    --light-sq-hl: #a8cceb;
+    --dark-sq-hl: #1a4a7a;
+    --accent: #0ea5e9;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  h1 { font-size: 2rem; font-weight: 900; letter-spacing: -1px; }
+  h1 span { color: var(--blue-light); }
+  .subtitle { color: var(--text-dim); font-size: 0.8rem; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 32px;
+    width: 100%;
+    max-width: 360px;
+    box-shadow: 0 20px 60px rgba(0,30,80,0.5);
+  }
+  .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 10px; font-weight: 700; }
+  .btn {
+    display: block; width: 100%; padding: 14px; border: none; border-radius: 12px;
+    font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.15s; font-family: inherit;
+  }
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-primary:hover { background: var(--blue-light); box-shadow: 0 0 20px rgba(59,130,246,0.4); }
+  .btn-secondary { background: var(--surface2); color: var(--blue-pale); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: #0a1e3d; border-color: var(--blue-light); }
+  .btn-sm { width: auto; padding: 8px 20px; font-size: 0.85rem; }
+  .divider { border: none; border-top: 1px solid #162a4a; margin: 24px 0; }
+  input {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 12px; padding: 12px 16px; font-size: 0.9rem; font-family: inherit;
+    outline: none; transition: border-color 0.15s; margin-bottom: 10px;
+  }
+  input:focus { border-color: var(--blue-light); }
+  input::placeholder { color: var(--text-dim); }
+  .hidden { display: none !important; }
+  /* Board */
+  #game-wrapper { width: 100%; max-width: 520px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .status-bar {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .color-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+  .dot-w { background: white; }
+  .dot-b { background: #1a1a2e; border: 1px solid #666; }
+  .turn-badge {
+    padding: 4px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700;
+    background: var(--surface2); color: var(--text-dim);
+  }
+  .turn-badge.active { background: var(--blue); color: white; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.7 } }
+  .check-badge { color: #ef4444; font-weight: 700; font-size: 0.85rem; }
+  .captures { width: 100%; background: var(--surface2); border-radius: 10px; padding: 7px 14px; min-height: 36px; display: flex; align-items: center; }
+  .cap-label { font-size: 0.7rem; color: var(--text-dim); margin-right: 8px; text-transform: uppercase; letter-spacing: 2px; }
+  .cap-pieces { font-size: 1.3rem; line-height: 1; }
+  .board-outer { position: relative; }
+  .board-coords-left {
+    position: absolute; left: -22px; top: 0; height: 100%;
+    display: flex; flex-direction: column;
+  }
+  .board-coords-bottom {
+    position: absolute; bottom: -20px; left: 0; width: 100%;
+    display: flex;
+  }
+  .coord { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; color: var(--text-dim); }
+  .board {
+    display: grid; grid-template-columns: repeat(8, 60px);
+    border: 2px solid var(--border); border-radius: 2px; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,20,60,0.6);
+  }
+  .sq {
+    width: 60px; height: 60px; display: flex; align-items: center; justify-content: center;
+    position: relative; cursor: pointer; transition: filter 0.1s; user-select: none;
+  }
+  .sq:hover { filter: brightness(1.15); }
+  .sq.light { background: var(--light-sq); }
+  .sq.dark { background: var(--dark-sq); }
+  .sq.last-light { background: var(--light-sq-hl); }
+  .sq.last-dark { background: var(--dark-sq-hl); }
+  .sq.selected { background: #3b82f6 !important; }
+  .sq.in-check { background: #ef4444 !important; }
+  .piece { font-size: 2.2rem; line-height: 1; pointer-events: none; }
+  .piece.white { color: white; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.8); }
+  .piece.black { color: #111827; text-shadow: 0 1px 2px rgba(255,255,255,0.25); }
+  .move-dot { width: 18px; height: 18px; border-radius: 50%; background: rgba(59,130,246,0.55); pointer-events: none; }
+  .move-ring { position: absolute; inset: 0; border: 4px solid rgba(59,130,246,0.7); border-radius: 2px; pointer-events: none; }
+  /* Game over */
+  .gameover-panel {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 20px; text-align: center;
+  }
+  .gameover-title { font-size: 1.5rem; font-weight: 900; margin-bottom: 4px; }
+  .gameover-sub { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 14px; }
+  /* Promotion */
+  #promo-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .promo-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+    padding: 28px; text-align: center;
+  }
+  .promo-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 16px; }
+  .promo-pieces { display: flex; gap: 10px; }
+  .promo-btn {
+    width: 64px; height: 64px; background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 2rem; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .promo-btn:hover { background: var(--blue); border-color: var(--blue-light); }
+  /* Waiting */
+  .pulse-icon { font-size: 2.5rem; display: block; animation: pulse 1.5s infinite; margin-bottom: 12px; }
+  .room-id-box { background: var(--surface2); border-radius: 12px; padding: 14px; margin-bottom: 14px; word-break: break-all; }
+  .room-id-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 6px; }
+  .room-id-text { font-weight: 700; font-size: 0.9rem; color: white; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--blue); color: white; padding: 10px 24px; border-radius: 10px;
+    font-size: 0.85rem; font-weight: 700; z-index: 200; opacity: 0; transition: opacity 0.3s;
+  }
+  .toast.show { opacity: 1; }
+  @media (max-width: 520px) {
+    .board { grid-template-columns: repeat(8, 42px); }
+    .sq { width: 42px; height: 42px; }
+    .piece { font-size: 1.6rem; }
+    .move-dot { width: 13px; height: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="header" style="text-align:center;margin-bottom:20px;">
+  <h1><span>♟</span> Chess P2P</h1>
+  <p class="subtitle">Multijugador · Sin registro</p>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="card">
+  <div class="label">Crear sala</div>
+  <button class="btn btn-primary" onclick="createRoom()">+ Nueva Partida</button>
+  <hr class="divider">
+  <div class="label">Unirse a sala</div>
+  <input type="text" id="join-input" placeholder="Pega el ID de sala aquí..." onkeydown="if(event.key==='Enter')joinRoom()">
+  <button class="btn btn-secondary" onclick="joinRoom()">Unirse →</button>
+  <p id="lobby-error" style="color:#ef4444;font-size:0.8rem;margin-top:8px;"></p>
+</div>
+
+<!-- WAITING -->
+<div id="waiting" class="card hidden" style="text-align:center;">
+  <span class="pulse-icon">⏳</span>
+  <p style="font-weight:700;font-size:1.1rem;margin-bottom:16px;">Esperando oponente...</p>
+  <div class="room-id-box">
+    <div class="room-id-label">Tu ID de sala</div>
+    <div class="room-id-text" id="room-id-display"></div>
+  </div>
+  <button class="btn btn-primary" onclick="copyId()">📋 Copiar ID</button>
+  <p style="color:var(--text-dim);font-size:0.75rem;margin-top:12px;opacity:0.7;">Comparte este ID con tu oponente</p>
+</div>
+
+<!-- GAME -->
+<div id="game-wrapper" class="hidden">
+  <div class="status-bar">
+    <div style="display:flex;align-items:center;">
+      <span class="color-dot" id="my-dot"></span>
+      <span style="font-size:0.85rem;">Tú: <strong id="my-color-label"></strong></span>
+    </div>
+    <div>
+      <span class="check-badge hidden" id="check-badge">¡Jaque!</span>
+      <span class="turn-badge" id="turn-badge">...</span>
+    </div>
+  </div>
+  <div class="captures"><span class="cap-label">Capturas</span><span class="cap-pieces" id="cap-opp"></span></div>
+  <div class="board-outer" style="margin:10px 0 24px 24px;">
+    <div class="board-coords-left" id="coords-left"></div>
+    <div class="board" id="board"></div>
+    <div class="board-coords-bottom" id="coords-bottom"></div>
+  </div>
+  <div class="captures"><span class="cap-label">Capturas</span><span class="cap-pieces" id="cap-mine"></span></div>
+  <div class="gameover-panel hidden" id="gameover-panel">
+    <div class="gameover-title" id="gameover-title"></div>
+    <div class="gameover-sub" id="gameover-sub"></div>
+    <button class="btn btn-primary" style="max-width:200px;margin:0 auto;" onclick="resetGame()">Revancha</button>
+  </div>
+</div>
+
+<!-- PROMOTION -->
+<div id="promo-modal" class="hidden">
+  <div class="promo-box">
+    <div class="promo-title">Elige pieza</div>
+    <div class="promo-pieces" id="promo-pieces"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PIECES = {
+  wK:'♔',wQ:'♕',wR:'♖',wB:'♗',wN:'♘',wP:'♙',
+  bK:'♚',bQ:'♛',bR:'♜',bB:'♝',bN:'♞',bP:'♟'
+}
+
+let peer = null, conn = null
+let myColor = 'w'
+let board = [], turn = 'w', selected = null, validMoves = [], lastMove = null
+let capturedW = [], capturedB = []
+let gameOver = false
+let pendingPromo = null
+
+function initBoard() {
+  const b = Array(8).fill(null).map(() => Array(8).fill(null))
+  const back = ['R','N','B','Q','K','B','N','R']
+  back.forEach((t, c) => { b[0][c] = {t,c:'b'}; b[7][c] = {t,c:'w'} })
+  for (let c = 0; c < 8; c++) { b[1][c] = {t:'P',c:'b'}; b[6][c] = {t:'P',c:'w'} }
+  return b
+}
+
+function cloneBoard(b) { return b.map(r => r.map(p => p ? {...p} : null)) }
+
+function getMovesRaw(b, row, col) {
+  const p = b[row][col]; if (!p) return []
+  const moves = [], {t, c: col2} = p, enemy = col2==='w'?'b':'w', dir = col2==='w'?-1:1
+  const inB = (r,c) => r>=0&&r<8&&c>=0&&c<8
+  const add = (r,c) => {
+    if (!inB(r,c)) return false
+    const tgt = b[r][c]
+    if (tgt && tgt.c === col2) return false
+    moves.push([r,c]); return !tgt
+  }
+  if (t==='P') {
+    const nr = row+dir
+    if (inB(nr,col) && !b[nr][col]) {
+      moves.push([nr,col])
+      const sr = col2==='w'?6:1
+      if (row===sr && !b[nr+dir]?.[col]) moves.push([nr+dir,col])
+    }
+    for (const dc of [-1,1]) {
+      if (inB(nr,col+dc) && b[nr][col+dc]?.c===enemy) moves.push([nr,col+dc])
+      if (lastMove && lastMove.t==='P' && lastMove.tr===row && lastMove.tc===col+dc && Math.abs(lastMove.fr-lastMove.tr)===2)
+        moves.push([nr,col+dc])
+    }
+  } else if (t==='N') {
+    [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc])=>add(row+dr,col+dc))
+  } else if (t==='K') {
+    [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc])=>add(row+dr,col+dc))
+  } else {
+    const dirs = []
+    if (t==='R'||t==='Q') dirs.push([-1,0],[1,0],[0,-1],[0,1])
+    if (t==='B'||t==='Q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1])
+    dirs.forEach(([dr,dc]) => { let r=row+dr,c=col+dc; while(inB(r,c)){if(!add(r,c))break;r+=dr;c+=dc} })
+  }
+  return moves
+}
+
+function isInCheck(b, color) {
+  let kr=-1,kc=-1
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]?.t==='K'&&b[r][c]?.c===color){kr=r;kc=c}
+  const enemy = color==='w'?'b':'w'
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) {
+    if(b[r][c]?.c===enemy) if(getMovesRaw(b,r,c).some(([mr,mc])=>mr===kr&&mc===kc)) return true
+  }
+  return false
+}
+
+function getLegal(b, row, col) {
+  const p = b[row][col]; if(!p) return []
+  return getMovesRaw(b,row,col).filter(([r,c])=>{
+    const nb = cloneBoard(b)
+    // en passant remove
+    if(p.t==='P'&&col!==c&&!nb[r][c]) nb[row][c]=null
+    nb[r][c]=nb[row][col]; nb[row][col]=null
+    return !isInCheck(nb, p.c)
+  })
+}
+
+function hasAnyLegal(b, color) {
+  for(let r=0;r<8;r++) for(let c=0;c<8;c++) if(b[r][c]?.c===color&&getLegal(b,r,c).length>0) return true
+  return false
+}
+
+function show(id) { document.getElementById(id).classList.remove('hidden') }
+function hide(id) { document.getElementById(id).classList.add('hidden') }
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show')
+  setTimeout(() => t.classList.remove('show'), 2000)
+}
+
+function copyId() {
+  navigator.clipboard.writeText(document.getElementById('room-id-display').textContent)
+  showToast('ID copiado!')
+}
+
+function setupConn(c) {
+  conn = c
+  conn.on('data', d => {
+    if (d.type==='move') applyMove(d.fr,d.fc,d.tr,d.tc,d.promo,true)
+    else if (d.type==='start') { hide('waiting'); show('game-wrapper'); renderBoard() }
+    else if (d.type==='reset') {
+      board=initBoard(); turn='w'; selected=null; validMoves=[]; lastMove=null
+      capturedW=[]; capturedB=[]; gameOver=false; pendingPromo=null
+      hide('gameover-panel'); renderBoard()
+    }
+  })
+}
+
+function createRoom() {
+  peer = new Peer()
+  peer.on('open', id => {
+    document.getElementById('room-id-display').textContent = id
+    hide('lobby'); show('waiting')
+    myColor = 'w'
+  })
+  peer.on('connection', c => {
+    setupConn(c)
+    c.on('open', () => { c.send({type:'start'}); hide('waiting'); show('game-wrapper'); board=initBoard(); renderBoard() })
+  })
+  peer.on('error', e => { document.getElementById('lobby-error').textContent = 'Error: ' + e.message; show('lobby') })
+}
+
+function joinRoom() {
+  const id = document.getElementById('join-input').value.trim()
+  if (!id) return
+  peer = new Peer()
+  myColor = 'b'
+  peer.on('open', () => {
+    const c = peer.connect(id)
+    setupConn(c)
+    c.on('open', () => { c.send({type:'start'}); board=initBoard(); })
+  })
+  peer.on('error', () => { document.getElementById('lobby-error').textContent = 'No se pudo conectar. Verifica el ID.' })
+}
+
+function applyMove(fr, fc, tr, tc, promoType, incoming=false) {
+  const p = board[fr][fc]; if(!p) return
+  const captured = board[tr][tc]
+  if (captured) { if(captured.c==='w') capturedW.push(captured.t); else capturedB.push(captured.t) }
+  // en passant
+  if (p.t==='P' && fc!==tc && !board[tr][tc]) {
+    const ep = board[fr][tc]
+    if(ep) { if(ep.c==='w') capturedW.push(ep.t); else capturedB.push(ep.t); board[fr][tc]=null }
+  }
+  board[tr][tc] = {...p}
+  if (promoType) board[tr][tc] = {t: promoType, c: p.c}
+  board[fr][fc] = null
+  lastMove = {t:p.t, fr, fc, tr, tc}
+  selected = null; validMoves = []
+  const next = p.c==='w'?'b':'w'
+  const inCheck = isInCheck(board, next)
+  if (!hasAnyLegal(board, next)) {
+    gameOver = true
+    const winner = inCheck ? (p.c==='w'?'Blancas':'Negras') : null
+    document.getElementById('gameover-title').textContent = winner ? `♟ Ganan las ${winner}!` : '🤝 Empate'
+    document.getElementById('gameover-sub').textContent = winner ? 'Jaque Mate' : 'Rey ahogado'
+    show('gameover-panel')
+  }
+  turn = next
+  renderBoard()
+}
+
+function handleClick(row, col) {
+  if (gameOver || turn !== myColor || pendingPromo) return
+  const p = board[row][col]
+  if (selected) {
+    const isValid = validMoves.some(([r,c]) => r===row && c===col)
+    if (isValid) {
+      const sp = board[selected[0]][selected[1]]
+      const isPromo = sp.t==='P' && ((sp.c==='w'&&row===0)||(sp.c==='b'&&row===7))
+      if (isPromo) {
+        pendingPromo = {fr:selected[0],fc:selected[1],tr:row,tc:col,color:sp.c}
+        showPromoModal(sp.c)
+        return
+      }
+      applyMove(selected[0],selected[1],row,col)
+      conn && conn.send({type:'move',fr:selected[0],fc:selected[1],tr:row,tc:col})
+      return
+    }
+    if (p?.c === myColor) { selected=[row,col]; validMoves=getLegal(board,row,col); renderBoard(); return }
+    selected=null; validMoves=[]; renderBoard(); return
+  }
+  if (p?.c === myColor) { selected=[row,col]; validMoves=getLegal(board,row,col); renderBoard() }
+}
+
+function showPromoModal(color) {
+  const pieces = ['Q','R','B','N']
+  const container = document.getElementById('promo-pieces')
+  container.innerHTML = pieces.map(t => `
+    <button class="promo-btn" onclick="doPromo('${t}')">${PIECES[color+t]}</button>
+  `).join('')
+  show('promo-modal')
+}
+
+function doPromo(type) {
+  if (!pendingPromo) return
+  const {fr,fc,tr,tc} = pendingPromo
+  hide('promo-modal')
+  applyMove(fr,fc,tr,tc,type)
+  conn && conn.send({type:'move',fr,fc,tr,tc,promo:type})
+  pendingPromo = null
+}
+
+function resetGame() {
+  board=initBoard(); turn='w'; selected=null; validMoves=[]; lastMove=null
+  capturedW=[]; capturedB=[]; gameOver=false; pendingPromo=null
+  hide('gameover-panel'); renderBoard()
+  conn && conn.send({type:'reset'})
+}
+
+function renderBoard() {
+  const flipped = myColor === 'b'
+  const boardEl = document.getElementById('board')
+  boardEl.innerHTML = ''
+
+  // Status
+  const myDot = document.getElementById('my-dot')
+  myDot.className = 'color-dot ' + (myColor==='w'?'dot-w':'dot-b')
+  document.getElementById('my-color-label').textContent = myColor==='w'?'Blancas':'Negras'
+  const tb = document.getElementById('turn-badge')
+  const checkBadge = document.getElementById('check-badge')
+  if (gameOver) { tb.textContent = ''; tb.className='turn-badge'; checkBadge.classList.add('hidden'); }
+  else if (turn===myColor) { tb.textContent='● Tu turno'; tb.className='turn-badge active'; }
+  else { tb.textContent='◌ Oponente'; tb.className='turn-badge'; }
+
+  const inCheck = isInCheck(board, turn)
+  if (inCheck && !gameOver) checkBadge.classList.remove('hidden')
+  else checkBadge.classList.add('hidden')
+
+  // Coords
+  const nums = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1]
+  const lets = flipped ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h']
+  document.getElementById('coords-left').innerHTML = nums.map(n=>`<span class="coord">${n}</span>`).join('')
+  document.getElementById('coords-bottom').innerHTML = lets.map(l=>`<span class="coord">${l}</span>`).join('')
+
+  for (let ri = 0; ri < 8; ri++) {
+    for (let ci = 0; ci < 8; ci++) {
+      const ar = flipped ? 7-ri : ri, ac = flipped ? 7-ci : ci
+      const p = board[ar][ac]
+      const isLight = (ar+ac)%2===0
+      const isSel = selected && selected[0]===ar && selected[1]===ac
+      const isValid = validMoves.some(([r,c])=>r===ar&&c===ac)
+      const isLast = lastMove && ((lastMove.fr===ar&&lastMove.fc===ac)||(lastMove.tr===ar&&lastMove.tc===ac))
+      const isKingCheck = p?.t==='K'&&p?.c===turn&&inCheck&&!gameOver
+
+      let cls = 'sq '
+      if (isSel) cls += 'selected'
+      else if (isKingCheck) cls += 'in-check'
+      else if (isLast) cls += isLight?'last-light':'last-dark'
+      else cls += isLight?'light':'dark'
+
+      const sq = document.createElement('div')
+      sq.className = cls
+      sq.onclick = () => handleClick(ar, ac)
+      if (p) {
+        const span = document.createElement('span')
+        span.className = 'piece ' + (p.c==='w'?'white':'black')
+        span.textContent = PIECES[p.c+p.t]
+        sq.appendChild(span)
+        if (isValid) { const ring=document.createElement('div'); ring.className='move-ring'; sq.appendChild(ring) }
+      } else if (isValid) {
+        const dot=document.createElement('div'); dot.className='move-dot'; sq.appendChild(dot)
+      }
+      boardEl.appendChild(sq)
+    }
+  }
+
+  // Captures
+  const enemy = myColor==='w'?'b':'w'
+  const capMine = myColor==='w' ? capturedB : capturedW
+  const capOpp  = myColor==='w' ? capturedW : capturedB
+  document.getElementById('cap-mine').textContent = capMine.map(t=>PIECES[enemy+t]).join('')
+  document.getElementById('cap-opp').textContent  = capOpp.map(t=>PIECES[myColor+t]).join('')
+}
+</script>
+</body>
+</html>
