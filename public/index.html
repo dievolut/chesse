@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ajedrez en Vivo</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/1.4.0/chess.min.js" defer></script>
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <main class="container">
+    <section class="left-panel">
+      <h1>Ajedrez en Vivo</h1>
+      <p>Comparte esta URL para jugar sin registro:</p>
+      <div class="link-row">
+        <input id="room-link" type="text" readonly />
+        <button id="copy-link">Copiar</button>
+      </div>
+
+      <div class="room-controls">
+        <input id="room-name" placeholder="nombre-de-sala" maxlength="32" />
+        <button id="join-room">Entrar / crear sala</button>
+      </div>
+
+      <p id="status" class="status"></p>
+      <ol id="moves" class="moves"></ol>
+      <button id="reset" class="reset">Reiniciar partida</button>
+    </section>
+
+    <section class="board-wrap">
+      <div id="board" class="board"></div>
+    </section>
+  </main>
+</body>
+</html>
